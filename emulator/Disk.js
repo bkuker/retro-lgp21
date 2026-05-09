@@ -186,13 +186,14 @@ class Disk {
     }
 
     /**************************************/
-    async stepDisk() {
+    stepDisk() {
         /* Steps the disk to its next word-time and updates the timing.
         Returns either immediately or after a delay to allow browser real time
         to catch up with the emulation clock, this.eTime. Since most browsers
         will force a setTimeout() to wait for a minimum of 4ms, this routine
         will not delay if emulation time has not yet reached the end of its
         time slice. Does not increment the track */
+        let ret = false;
 
         // If a step is already in progress, complain.
         if (this.stepWait) {
@@ -209,9 +210,16 @@ class Disk {
                     this.avgThrottleDelay*Disk.delayAvgAlpha1 + delay*Disk.delayAvgAlpha;
 
             // Set this.stepWait during the delay to catch redundant calls on stepDisk().
-            this.stepWait = this.diskTimer.set(delay);
-            await this.stepWait;
-            this.stepWait = null;
+            if ( delay > Util.minTimeout ){
+                this.stepWait = this.diskTimer.set(delay);
+                //console.log(delay);
+                ret = this.stepWait;
+                this.stepWait = null;
+            } else if ( delay < 0 ){
+                performance.mark('negative-delay');
+            } else {
+                performance.mark('no-delay');
+            }
 
             // Compute the average deviation between requested and actual delay.
             this.avgThrottleDelta = this.avgThrottleDelta*Disk.delayAvgAlpha1 +
@@ -221,6 +229,7 @@ class Disk {
         ++this.diskTime;
         const newL = this.L.inc();
         this.diskIndex = this.track.value*Util.physicalTrackSize + newL;
+        return ret;
     }
 
     /**************************************/

@@ -516,7 +516,7 @@ class Processor {
     *******************************************************************/
 
     /**************************************/
-    async phase1() {
+    phase1() {
         /* Most commonly used to search for the next instruction word on the
         disk as specfied by the track and sector portion of the C register.
         Also used by I/O to delay until input is received or an output device
@@ -573,12 +573,12 @@ class Processor {
             }
         }
 
-        await this.disk.stepDisk();
+
         return nextPhase;
     }
 
     /**************************************/
-    async phase2() {
+    phase2() {
         /* Used to load the word at the current disk location to the R register
         in preparation for execution. Also handles conditional skipping by
         switching back to Phase 1 instead of 3 */
@@ -603,12 +603,12 @@ class Processor {
             this.lastOpEnded = true;    // don't trace skipped instructions
         }
 
-        await this.disk.stepDisk();
+
         return nextPhase;
     }
 
     /**************************************/
-    async phase3() {
+    phase3() {
         /* Most commonly used to search for the current instruction's operand
         location as specified by the track and sector portion of the R register
         and load the order code into the Q register.
@@ -666,12 +666,12 @@ class Processor {
             break;
         }
 
-        await this.disk.stepDisk();
+
         return nextPhase;
     }
 
     /**************************************/
-    async phase4() {
+    phase4() {
         /* Primary phase for executing the instruction in the the C register as
         loaded into this.order. It is primarily concerned with modifying the A
         register, and usually terminates in one word-time, but some instructions
@@ -718,6 +718,7 @@ class Processor {
             break;
 
         case Processor.opInput:         // I: Input & Left Shift (4 or 6 bit)
+            performance.mark('input');
             this.A.value = this.K.value ? ((this.A.value << 4) & Util.fullWordMask) | (this.P.value >> 2)
                                         : ((this.A.value << 6) & Util.fullWordMask) | (this.P.value);
             this.waitingIODevice = true;
@@ -739,6 +740,7 @@ class Processor {
             break;
 
         case Processor.opPrint:         // P: Print/Output/No-Op (4 or 6 bit)
+            performance.mark('print');
             this.P.value = (this.A.value >>> 26) & 0b111111;
             this.Q.Q2 = 1;              // Do not block in next P1
             this.Q.Q3 = 1;              // Indicate output order (used by P1 since Q is altered)
@@ -826,7 +828,7 @@ class Processor {
             this.senseHalt();           // Z: Sense/Halt (may turn Q1 back on to command a skip)
         }
 
-        await this.disk.stepDisk();
+
         return nextPhase;
     }
 
@@ -879,25 +881,29 @@ class Processor {
         do {                            // run until blocked
             switch (phase) {
             case 1:                     // Phase 1
-                phase = await this.phase1();
+                phase =  this.phase1();
                 break;
 
             case 2:                     // Phase 2
-                phase = await this.phase2();
+                phase =  this.phase2();
                 break;
 
             case 3:                     // Phase 3
-                phase = await this.phase3();
+                phase =  this.phase3();
                 break;
 
             case 4:                     // Phase 4
-                phase = await this.phase4();
+                phase =  this.phase4();
                 break;
 
             default:                    // Error - should never happen
                 console.log(`Invalid Processor phase: ${phase}`);
                 throw new Error("Invalid Processor phase");
                 break;
+            }
+            let maybeP = this.disk.stepDisk();
+            if ( maybeP ){
+                await maybeP;
             }
 
             this.setPhaseFF(phase);
