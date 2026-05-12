@@ -31,7 +31,6 @@ class ControlPanel {
     // Static class properties
 
     static displayAlpha = 0.01;         // running average decay factor
-    static displayRefreshPeriod = 50;   // ms
     static lampFreezeThreshold = FlipFlop.lampPersistence*2;
     static downSwitchImage = "./resources/ToggleDown.png";
     static upSwitchImage = "./resources/ToggleUp.png";
@@ -61,7 +60,7 @@ class ControlPanel {
 
     // Performance stats
     avgInstructionRate = 0;             // running average instructions/sec
-    intervalToken = 0;                  // panel refresh timer cancel token
+    animationToken = null;                  // panel refresh timer cancel token
     lastETime = 0;                      // last emulation clock value
     lastInstructionCount = 0;           // prior total instruction count (for average)
     lastRunTime = 0;                    // prior total run time (for average), ms
@@ -269,7 +268,7 @@ class ControlPanel {
                 this.lastRunTime = this.processor.disk.runTime;
                 this.resetTiming();             // initialize the run timer
                 this.updatePanel();             // initialize the scope traces
-                this.intervalToken = this.window.setTimeout(this.boundUpdatePanel, ControlPanel.displayRefreshPeriod);
+                this.animationToken = this.window.requestAnimationFrame(this.boundUpdatePanel);
 
                 // Reinstate the former MODE switch setting and get the side effects.
                 const modeState = this.config.getNode("ControlPanel.modeSwitch");
@@ -407,7 +406,7 @@ class ControlPanel {
         this.drawScopeTrace(this.scopePathR, ControlPanel.scopeTraceX, ControlPanel.scopeTraceRY, p.R.value);
         this.drawScopeTrace(this.scopePathA, ControlPanel.scopeTraceX, ControlPanel.scopeTraceAY, p.A.value);
 
-        this.intervalToken = this.window.setTimeout(this.boundUpdatePanel, ControlPanel.displayRefreshPeriod);
+        this.animationToken = this.window.requestAnimationFrame(this.boundUpdatePanel);
     }
 
     /**************************************/
@@ -513,7 +512,7 @@ class ControlPanel {
             this.emulationPaused = true;
             this.pauseStartStamp = performance.now();
             this.processor.startPause(this.pauseStartStamp);
-            clearTimeout(this.intervalToken);           // stop Control Panel refresh
+            this.window.cancelAnimationFrame(this.animationToken);           // stop Control Panel refresh
             console.debug(`<Emulation paused>  stamp=${this.pauseStartStamp}`);
         }
     }
@@ -533,7 +532,7 @@ class ControlPanel {
             this.lastRunTime += deltaTime;
             ////this.runTimeOffset += deltaTime;
             this.processor.endPause(this.pauseStartStamp, deltaTime);
-            this.intervalToken = this.window.setTimeout(this.boundUpdatePanel, ControlPanel.displayRefreshPeriod);
+            this.animationToken = this.window.requestAnimationFrame(this.boundUpdatePanel);
             console.debug(`<Emulation resumed> stamp=${now}, delta=${deltaTime} ms`);
         }
     }
@@ -796,9 +795,9 @@ class ControlPanel {
     shutDown() {
         /* Shuts down the panel */
 
-        if (this.intervalToken) {
-            this.window.clearTimeout(this.intervalToken);
-            this.intervalToken = 0;
+        if (this.animationToken !== null) {
+            this.window.cancelAnimationFrame(this.animationToken);
+            this.animationToken = null;
         }
 
         // Clear the scope.
